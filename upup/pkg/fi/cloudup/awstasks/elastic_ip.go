@@ -36,8 +36,9 @@ type ElasticIP struct {
 	Name      *string
 	Lifecycle *fi.Lifecycle
 
-	ID       *string
-	PublicIP *string
+	ID           *string
+	PublicIP     *string
+	AllocationID *string
 
 	// ElasticIPs don't support tags.  We instead find it via a related resource.
 
@@ -284,17 +285,51 @@ type terraformElasticIP struct {
 	Tags map[string]string `json:"tags,omitempty"`
 }
 
-func (_ *ElasticIP) RenderTerraform(t *terraform.TerraformTarget, a, e, changes *ElasticIP) error {
-	tf := &terraformElasticIP{
-		VPC:  aws.Bool(true),
-		Tags: e.Tags,
+func (e *ElasticIP) FindAllocationID(publicIP *string, cloud awsup.AWSCloud) (*string, error) {
+	if publicIP == nil {
+		return nil, fmt.Errorf("cannot find allocation ID without ElasticIP publicIP")
 	}
 
-	return t.RenderResource("aws_eip", *e.Name, tf)
+	request := &ec2.DescribeAddressesInput{Filters: []*ec2.Filter{awsup.NewEC2Filter("public-ip", *publicIP)}}
+	response, err := cloud.EC2().DescribeAddresses(request)
+	if err != nil {
+		return nil, fmt.Errorf("error listing ElasticIPs: %v", err)
+	}
+
+	if response == nil || len(response.Addresses) == 0 {
+		return nil, nil
+	}
+
+	if len(response.Addresses) != 1 {
+		return nil, fmt.Errorf("found multiple ElasticIPs for: %v", e)
+	}
+
+	klog.V(2).Infof("Found ElasticIP Allocation ID for EIP: %q - %q", *publicIP, response.Addresses[0].AllocationId)
+	return response.Addresses[0].AllocationId, nil
+}
+
+func (eip *ElasticIP) RenderTerraform(t *terraform.TerraformTarget, a, e, changes *ElasticIP) error {
+	if e.PublicIP == nil {
+		tf := &terraformElasticIP{
+			VPC:  aws.Bool(true),
+			Tags: e.Tags,
+		}
+
+		return t.RenderResource("aws_eip", *e.Name, tf)
+	}
+
+	e.AllocationID, _ = e.FindAllocationID(e.PublicIP, t.Cloud.(awsup.AWSCloud))
+	return nil
 }
 
 func (e *ElasticIP) TerraformLink() *terraform.Literal {
-	return terraform.LiteralProperty("aws_eip", *e.Name, "id")
+	if e.PublicIP == nil {
+		return terraform.LiteralProperty("aws_eip", *e.Name, "id")
+	} else if e.AllocationID != nil {
+		return terraform.LiteralFromStringValue(*e.AllocationID)
+	} else {
+		return nil
+	}
 }
 
 type cloudformationElasticIP struct {
