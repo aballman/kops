@@ -268,6 +268,91 @@ func (b *PolicyBuilder) IAMPrefix() string {
 	}
 }
 
+func (b *PolicyBuilder) buildAWSS3Policy(p *Policy, bucket string, key string) *Policy {
+	iamS3Path := bucket + "/" + key
+	iamS3Path = strings.TrimSuffix(iamS3Path, "/")
+
+	p.Statement = append(p.Statement, &Statement{
+		Effect: StatementEffectAllow,
+		Action: stringorslice.Of("s3:GetBucketLocation", "s3:GetEncryptionConfiguration", "s3:ListBucket"),
+		Resource: stringorslice.Slice([]string{
+			strings.Join([]string{b.IAMPrefix(), ":s3:::", bucket}, ""),
+		}),
+	})
+
+	if b.Cluster.Spec.IAM.Legacy {
+		p.Statement = append(p.Statement, &Statement{
+			Effect: StatementEffectAllow,
+			Action: stringorslice.Slice([]string{"s3:*"}),
+			Resource: stringorslice.Of(
+				strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/*"}, ""),
+			),
+		})
+	} else {
+		if b.Role == kops.InstanceGroupRoleMaster {
+			p.Statement = append(p.Statement, &Statement{
+				Effect: StatementEffectAllow,
+				Action: stringorslice.Slice([]string{"s3:Get*"}),
+				Resource: stringorslice.Of(
+					strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/*"}, ""),
+				),
+			})
+		} else if b.Role == kops.InstanceGroupRoleNode {
+			resources := []string{
+				strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/addons/*"}, ""),
+				strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/cluster.spec"}, ""),
+				strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/config"}, ""),
+				strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/instancegroup/*"}, ""),
+				strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/issued/*"}, ""),
+				strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/kube-proxy/*"}, ""),
+				strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/ssh/*"}, ""),
+				strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/secrets/dockerconfig"}, ""),
+			}
+
+			// @check if bootstrap tokens are enabled and if so enable access to client certificate
+			if b.UseBootstrapTokens() {
+				resources = append(resources, strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/node-authorizer-client/*"}, ""))
+			} else {
+				resources = append(resources, strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/kubelet/*"}, ""))
+			}
+
+			sort.Strings(resources)
+
+			p.Statement = append(p.Statement, &Statement{
+				Effect:   StatementEffectAllow,
+				Action:   stringorslice.Slice([]string{"s3:Get*"}),
+				Resource: stringorslice.Of(resources...),
+			})
+
+			if b.Cluster.Spec.Networking != nil {
+				// @check if kuberoute is enabled and permit access to the private key
+				if b.Cluster.Spec.Networking.Kuberouter != nil {
+					p.Statement = append(p.Statement, &Statement{
+						Effect: StatementEffectAllow,
+						Action: stringorslice.Slice([]string{"s3:Get*"}),
+						Resource: stringorslice.Of(
+							strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/kube-router/*"}, ""),
+						),
+					})
+				}
+
+				// @check if calico is enabled as the CNI provider and permit access to the client TLS certificate by default
+				if b.Cluster.Spec.Networking.Calico != nil || b.Cluster.Spec.Networking.Cilium != nil {
+					p.Statement = append(p.Statement, &Statement{
+						Effect: StatementEffectAllow,
+						Action: stringorslice.Slice([]string{"s3:Get*"}),
+						Resource: stringorslice.Of(
+							strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/calico-client/*"}, ""),
+						),
+					})
+				}
+			}
+		}
+	}
+
+	return p
+}
+
 // AddS3Permissions updates an IAM Policy with statements granting tailored
 // access to S3 assets, depending on the instance group role
 func (b *PolicyBuilder) AddS3Permissions(p *Policy) (*Policy, error) {
@@ -319,89 +404,19 @@ func (b *PolicyBuilder) AddS3Permissions(p *Policy) (*Policy, error) {
 		}
 
 		if s3Path, ok := vfsPath.(*vfs.S3Path); ok {
-			iamS3Path := s3Path.Bucket() + "/" + s3Path.Key()
-			iamS3Path = strings.TrimSuffix(iamS3Path, "/")
-
-			p.Statement = append(p.Statement, &Statement{
-				Effect: StatementEffectAllow,
-				Action: stringorslice.Of("s3:GetBucketLocation", "s3:GetEncryptionConfiguration", "s3:ListBucket"),
-				Resource: stringorslice.Slice([]string{
-					strings.Join([]string{b.IAMPrefix(), ":s3:::", s3Path.Bucket()}, ""),
-				}),
-			})
-
-			if b.Cluster.Spec.IAM.Legacy {
-				p.Statement = append(p.Statement, &Statement{
-					Effect: StatementEffectAllow,
-					Action: stringorslice.Slice([]string{"s3:*"}),
-					Resource: stringorslice.Of(
-						strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/*"}, ""),
-					),
-				})
-			} else {
-				if b.Role == kops.InstanceGroupRoleMaster {
-					p.Statement = append(p.Statement, &Statement{
-						Effect: StatementEffectAllow,
-						Action: stringorslice.Slice([]string{"s3:Get*"}),
-						Resource: stringorslice.Of(
-							strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/*"}, ""),
-						),
-					})
-				} else if b.Role == kops.InstanceGroupRoleNode {
-					resources := []string{
-						strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/addons/*"}, ""),
-						strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/cluster.spec"}, ""),
-						strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/config"}, ""),
-						strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/instancegroup/*"}, ""),
-						strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/issued/*"}, ""),
-						strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/kube-proxy/*"}, ""),
-						strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/ssh/*"}, ""),
-						strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/secrets/dockerconfig"}, ""),
-					}
-
-					// @check if bootstrap tokens are enabled and if so enable access to client certificate
-					if b.UseBootstrapTokens() {
-						resources = append(resources, strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/node-authorizer-client/*"}, ""))
-					} else {
-						resources = append(resources, strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/kubelet/*"}, ""))
-					}
-
-					sort.Strings(resources)
-
-					p.Statement = append(p.Statement, &Statement{
-						Effect:   StatementEffectAllow,
-						Action:   stringorslice.Slice([]string{"s3:Get*"}),
-						Resource: stringorslice.Of(resources...),
-					})
-
-					if b.Cluster.Spec.Networking != nil {
-						// @check if kuberoute is enabled and permit access to the private key
-						if b.Cluster.Spec.Networking.Kuberouter != nil {
-							p.Statement = append(p.Statement, &Statement{
-								Effect: StatementEffectAllow,
-								Action: stringorslice.Slice([]string{"s3:Get*"}),
-								Resource: stringorslice.Of(
-									strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/kube-router/*"}, ""),
-								),
-							})
-						}
-
-						// @check if calico is enabled as the CNI provider and permit access to the client TLS certificate by default
-						if b.Cluster.Spec.Networking.Calico != nil || b.Cluster.Spec.Networking.Cilium != nil {
-							p.Statement = append(p.Statement, &Statement{
-								Effect: StatementEffectAllow,
-								Action: stringorslice.Slice([]string{"s3:Get*"}),
-								Resource: stringorslice.Of(
-									strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/calico-client/*"}, ""),
-								),
-							})
-						}
-					}
-				}
-			}
+			p = b.buildAWSS3Policy(p, s3Path.Bucket(), s3Path.Key())
 		} else if _, ok := vfsPath.(*vfs.MemFSPath); ok {
 			// Tests -ignore - nothing we can do in terms of IAM policy
 			klog.Warningf("ignoring memfs path %q for IAM policy builder", vfsPath)
+		} else if vfs, ok := vfsPath.(*vfs.FSPath); ok {
+			if b.Cluster.Spec.CloudProvider == string(kops.CloudProviderAWS) {
+				splitPath := strings.Split(strings.TrimSuffix(vfs.Path(), "/"), "/")
+				bucket := splitPath[len(splitPath)-2]
+
+				p = b.buildAWSS3Policy(p, bucket, vfs.Base())
+			} else {
+				return nil, fmt.Errorf("path is not cluster readable: %v", root)
+			}
 		} else {
 			// We could implement this approach, but it seems better to
 			// get all clouds using cluster-readable storage
@@ -426,6 +441,22 @@ func (b *PolicyBuilder) AddS3Permissions(p *Policy) (*Policy, error) {
 					strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/*"}, ""),
 				),
 			})
+		} else if vfs, ok := vfsPath.(*vfs.FSPath); ok {
+			if b.Cluster.Spec.CloudProvider == string(kops.CloudProviderAWS) {
+				// Tests -ignore - nothing we can do in terms of IAM policy
+				splitPath := strings.Split(strings.TrimSuffix(vfs.Path(), "/"), "/")
+
+				bucket := strings.TrimSuffix(splitPath[len(splitPath)-2], "/")
+				iamS3Path := strings.Join([]string{bucket, vfs.Base()}, "/")
+
+				p.Statement = append(p.Statement, &Statement{
+					Effect: StatementEffectAllow,
+					Action: stringorslice.Slice([]string{"s3:GetObject", "s3:DeleteObject", "s3:PutObject"}),
+					Resource: stringorslice.Of(
+						strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/*"}, ""),
+					),
+				})
+			}
 		} else {
 			klog.Warningf("unknown writeable path, can't apply IAM policy: %q", vfsPath)
 		}
