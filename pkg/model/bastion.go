@@ -17,6 +17,7 @@ limitations under the License.
 package model
 
 import (
+	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -24,10 +25,13 @@ import (
 	"k8s.io/kops/pkg/featureflag"
 	"k8s.io/kops/upup/pkg/fi"
 	"k8s.io/kops/upup/pkg/fi/cloudup/awstasks"
+	"k8s.io/kops/util/pkg/vfs"
 )
 
 const BastionELBSecurityGroupPrefix = "bastion"
 const BastionELBDefaultIdleTimeout = 5 * time.Minute
+
+const BastionELBAccessLogsEmitIntervalMinutes = 5
 
 // BastionModelBuilder adds model objects to support bastions
 //
@@ -198,6 +202,27 @@ func (b *BastionModelBuilder) Build(c *fi.ModelBuilderContext) error {
 		}
 	}
 
+	// Configure Access Logs
+	var accessLogs *awstasks.LoadBalancerAccessLog
+	if b.Cluster.Spec.Topology.Bastion.AccessLogsStorage != nil {
+		p, err := vfs.Context.BuildVfsPath(*b.Cluster.Spec.Topology.Bastion.AccessLogsStorage)
+		if err != nil {
+			return err
+		}
+
+		s3Path, ok := p.(*vfs.S3Path)
+		if ok == false {
+			return fmt.Errorf("Did not find AWS ELB compatible storage path")
+		} else {
+			accessLogs = &awstasks.LoadBalancerAccessLog{
+				S3BucketName:   s(s3Path.Bucket()),
+				S3BucketPrefix: s(s3Path.Key()),
+				Enabled:        fi.Bool(true),
+				EmitInterval:   i64(BastionELBAccessLogsEmitIntervalMinutes),
+			}
+		}
+	}
+
 	// Create ELB itself
 	var elb *awstasks.LoadBalancer
 	{
@@ -235,6 +260,8 @@ func (b *BastionModelBuilder) Build(c *fi.ModelBuilderContext) error {
 				HealthyThreshold:   i64(2),
 				UnhealthyThreshold: i64(2),
 			},
+
+			AccessLog: accessLogs,
 
 			ConnectionSettings: &awstasks.LoadBalancerConnectionSettings{
 				IdleTimeout: i64(int64(idleTimeout.Seconds())),

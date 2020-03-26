@@ -20,4 +20,7 @@ type BastionSpec struct {
 	BastionPublicName string `json:"bastionPublicName,omitempty"`
 	// IdleTimeoutSeconds is the bastion's Loadbalancer idle timeout
 	IdleTimeoutSeconds *int64 `json:"idleTimeoutSeconds,omitempty"`
+
+	// Bastion Access Logs
+	AccessLogsStorage *string `json:"accessLogsStorage,omitempty"`
 }
