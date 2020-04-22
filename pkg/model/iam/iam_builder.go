@@ -409,7 +409,7 @@ func (b *PolicyBuilder) AddS3Permissions(p *Policy) (*Policy, error) {
 		} else if vfs, ok := vfsPath.(*vfs.FSPath); ok {
 			if b.Cluster.Spec.CloudProvider == string(kops.CloudProviderAWS) {
 				splitPath := strings.Split(strings.TrimSuffix(vfs.Path(), "/"), "/")
-				bucket := splitPath[len(splitPath)-1]
+				bucket := splitPath[len(splitPath)-2]
 
 				p = b.buildAWSS3Policy(p, bucket, vfs.Base())
 			} else {
@@ -444,8 +444,8 @@ func (b *PolicyBuilder) AddS3Permissions(p *Policy) (*Policy, error) {
 				// Tests -ignore - nothing we can do in terms of IAM policy
 				splitPath := strings.Split(strings.TrimSuffix(vfs.Path(), "/"), "/")
 
-				bucket := strings.TrimSuffix(splitPath[len(splitPath)-1], "/")
-				iamS3Path := strings.Join([]string{bucket, "/", vfs.Base()}, "/")
+				bucket := strings.TrimSuffix(splitPath[len(splitPath)-2], "/")
+				iamS3Path := strings.Join([]string{bucket, vfs.Base()}, "/")
 
 				p.Statement = append(p.Statement, &Statement{
 					Effect: StatementEffectAllow,
