@@ -267,7 +267,7 @@ func (b *PolicyBuilder) IAMPrefix() string {
 }
 
 func (b *PolicyBuilder) buildAWSS3Policy(p *Policy, bucket string, key string) *Policy {
-	iamS3Path := s3Path.Bucket() + "/" + s3Path.Key()
+	iamS3Path := bucket + "/" + key
 	iamS3Path = strings.TrimSuffix(iamS3Path, "/")
 
 	p.Statement = append(p.Statement, &Statement{
@@ -402,7 +402,7 @@ func (b *PolicyBuilder) AddS3Permissions(p *Policy) (*Policy, error) {
 		}
 
 		if s3Path, ok := vfsPath.(*vfs.S3Path); ok {
-			p = buildAWSS3Policy(p, s3Path.Bucket(), s3Path.Key())
+			p = b.buildAWSS3Policy(p, s3Path.Bucket(), s3Path.Key())
 		} else if _, ok := vfsPath.(*vfs.MemFSPath); ok {
 			// Tests -ignore - nothing we can do in terms of IAM policy
 			klog.Warningf("ignoring memfs path %q for IAM policy builder", vfsPath)
