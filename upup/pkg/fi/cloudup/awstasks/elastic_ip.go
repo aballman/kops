@@ -303,7 +303,7 @@ func (e *ElasticIP) FindAllocationID(publicIP *string, cloud awsup.AWSCloud) (*s
 		return nil, fmt.Errorf("found multiple ElasticIPs for: %v", e)
 	}
 
-	glog.V(2).Infof("Found ElasticIP Allocation ID for EIP: %q - %q", *publicIP, response.Addresses[0].AllocationId)
+	klog.V(2).Infof("Found ElasticIP Allocation ID for EIP: %q - %q", *publicIP, response.Addresses[0].AllocationId)
 	return response.Addresses[0].AllocationId, nil
 }
 
