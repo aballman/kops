@@ -206,11 +206,6 @@ func (in *BastionSpec) DeepCopyInto(out *BastionSpec) {
 		*out = new(int64)
 		**out = **in
 	}
-	if in.AccessLogsStorage != nil {
-		in, out := &in.AccessLogsStorage, &out.AccessLogsStorage
-		*out = new(string)
-		**out = **in
-	}
 	return
 }
 

@@ -1093,7 +1093,6 @@ func Convert_kops_AwsAuthenticationSpec_To_v1alpha2_AwsAuthenticationSpec(in *ko
 func autoConvert_v1alpha2_BastionSpec_To_kops_BastionSpec(in *BastionSpec, out *kops.BastionSpec, s conversion.Scope) error {
 	out.BastionPublicName = in.BastionPublicName
 	out.IdleTimeoutSeconds = in.IdleTimeoutSeconds
-	out.AccessLogsStorage = in.AccessLogsStorage
 	return nil
 }
 
@@ -1105,7 +1104,6 @@ func Convert_v1alpha2_BastionSpec_To_kops_BastionSpec(in *BastionSpec, out *kops
 func autoConvert_kops_BastionSpec_To_v1alpha2_BastionSpec(in *kops.BastionSpec, out *BastionSpec, s conversion.Scope) error {
 	out.BastionPublicName = in.BastionPublicName
 	out.IdleTimeoutSeconds = in.IdleTimeoutSeconds
-	out.AccessLogsStorage = in.AccessLogsStorage
 	return nil
 }
 
