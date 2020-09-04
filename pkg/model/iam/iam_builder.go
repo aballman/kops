@@ -274,7 +274,7 @@ func (b *PolicyBuilder) buildAWSS3Policy(p *Policy, bucket string, key string) *
 		Effect: StatementEffectAllow,
 		Action: stringorslice.Of("s3:GetBucketLocation", "s3:GetEncryptionConfiguration", "s3:ListBucket"),
 		Resource: stringorslice.Slice([]string{
-			strings.Join([]string{b.IAMPrefix(), ":s3:::", s3Path.Bucket()}, ""),
+			strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path.Bucket()}, ""),
 		}),
 	})
 
