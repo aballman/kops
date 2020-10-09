@@ -278,12 +278,12 @@ func (b *PolicyBuilder) buildAWSS3Policy(p *Policy, bucket string, key string) *
 
 	p.Statement = append(p.Statement, &Statement{
 		Effect: StatementEffectAllow,
-				Action: stringorslice.Of(
-					"s3:GetBucketLocation",
-					"s3:GetEncryptionConfiguration",
-					"s3:ListBucket",
-					"s3:ListBucketVersions",
-				),
+		Action: stringorslice.Of(
+			"s3:GetBucketLocation",
+			"s3:GetEncryptionConfiguration",
+			"s3:ListBucket",
+			"s3:ListBucketVersions",
+		),
 		Resource: stringorslice.Slice([]string{
 			strings.Join([]string{b.IAMPrefix(), ":s3:::", bucket}, ""),
 		}),
@@ -333,11 +333,11 @@ func (b *PolicyBuilder) buildAWSS3Policy(p *Policy, bucket string, key string) *
 				Resource: stringorslice.Of(resources...),
 			})
 
-					networkingSpec := b.Cluster.Spec.Networking
+			networkingSpec := b.Cluster.Spec.Networking
 
-					if networkingSpec != nil {
+			if networkingSpec != nil {
 				// @check if kuberoute is enabled and permit access to the private key
-						if networkingSpec.Kuberouter != nil {
+				if networkingSpec.Kuberouter != nil {
 					p.Statement = append(p.Statement, &Statement{
 						Effect: StatementEffectAllow,
 						Action: stringorslice.Slice([]string{"s3:Get*"}),
@@ -348,7 +348,7 @@ func (b *PolicyBuilder) buildAWSS3Policy(p *Policy, bucket string, key string) *
 				}
 
 				// @check if calico is enabled as the CNI provider and permit access to the client TLS certificate by default
-						if networkingSpec.Calico != nil {
+				if networkingSpec.Calico != nil {
 					p.Statement = append(p.Statement, &Statement{
 						Effect: StatementEffectAllow,
 						Action: stringorslice.Slice([]string{"s3:Get*"}),
@@ -358,26 +358,26 @@ func (b *PolicyBuilder) buildAWSS3Policy(p *Policy, bucket string, key string) *
 					})
 				}
 
-						// @check if cilium is enabled as the CNI provider and permit access to the cilium etc client TLS certificate by default
-						// As long as the Cilium Etcd cluster exists, we should do this
-						ciliumEtcd := false
+				// @check if cilium is enabled as the CNI provider and permit access to the cilium etc client TLS certificate by default
+				// As long as the Cilium Etcd cluster exists, we should do this
+				ciliumEtcd := false
 
-						for _, cluster := range b.Cluster.Spec.EtcdClusters {
-							if cluster.Name == "cilium" {
-								ciliumEtcd = true
-								break
-							}
-						}
+				for _, cluster := range b.Cluster.Spec.EtcdClusters {
+					if cluster.Name == "cilium" {
+						ciliumEtcd = true
+						break
+					}
+				}
 
-						if networkingSpec.Cilium != nil && ciliumEtcd {
-							p.Statement = append(p.Statement, &Statement{
-								Effect: StatementEffectAllow,
-								Action: stringorslice.Slice([]string{"s3:Get*"}),
-								Resource: stringorslice.Of(
-									strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/etcd-clients-ca-cilium/*"}, ""),
-								),
-							})
-						}
+				if networkingSpec.Cilium != nil && ciliumEtcd {
+					p.Statement = append(p.Statement, &Statement{
+						Effect: StatementEffectAllow,
+						Action: stringorslice.Slice([]string{"s3:Get*"}),
+						Resource: stringorslice.Of(
+							strings.Join([]string{b.IAMPrefix(), ":s3:::", iamS3Path, "/pki/private/etcd-clients-ca-cilium/*"}, ""),
+						),
+					})
+				}
 			}
 		}
 	}
